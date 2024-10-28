@@ -12,6 +12,8 @@ map<string, int> getFileTypesCountMap(vector<string> lines, map<char, string> av
 
 int main()
 {
+    // pfd[0] - read
+    // pfd[1] - write
     int pfd[2];
     pipe(pfd);
 
@@ -19,21 +21,31 @@ int main()
 
     if (pid == 0)
     {
+        close(pfd[0]); // because we do not read from pipe
         dup2(pfd[1], STDOUT_FILENO);
-        execl("/bin/ls", "/bin/ls", "-l", ".", NULL);
 
-        perror("Can not execute 'ls' command");
-        return 1;
+        int statusCode = execl("/bin/ls", "/bin/ls", "-la", ".", NULL);
+        close(pfd[1]);
+
+        if (statusCode == -1)
+        {
+            cout << "Can not execute 'ls' command" << endl;
+            return 1;
+        }
+
+        return 0;
     }
     else if (pid > 0)
     {
+        close(pfd[1]); // because we only read from pipe, but do not write into
         wait(NULL);
-        close(pfd[1]);
 
         vector<string> lines = getOutputLines(pfd[0]);
-        map<char, string> fileTypesMap = getAvailableFiletypesMap();
+        close(pfd[0]);
 
+        map<char, string> fileTypesMap = getAvailableFiletypesMap();
         map<string, int> fileTypesCountMap = getFileTypesCountMap(lines, fileTypesMap);
+
         for (auto [key, value] : fileTypesCountMap)
         {
             cout << key << ": " << value << endl;
@@ -41,7 +53,7 @@ int main()
     }
     else
     {
-        perror("Error to fork");
+        cout << "Failed to fork" << endl;
         return 1;
     }
 
@@ -51,11 +63,11 @@ int main()
 vector<string> getOutputLines(int pipeDescriptor)
 {
     string result;
-    char buffer[1];
+    char c;
 
-    while (read(pipeDescriptor, buffer, 1) > 0)
+    while (read(pipeDescriptor, &c, sizeof(char)) > 0)
     {
-        result.push_back(char(*buffer));
+        result.push_back(c);
     }
 
     vector<string> lines;
